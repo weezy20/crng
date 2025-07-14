@@ -1,0 +1,11 @@
+[package]
+name = "crng"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+hex = "0.4.3"
+rand = "0.9.1"
+rayon = "1.10.0"
+reqwest = { version = "0.12.22", features = ["blocking", "json"] }
+serde = { version = "1.0", features = ["derive"] }
