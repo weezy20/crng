@@ -1,6 +1,6 @@
 # crng
 
-Quantum random number generator that fetches entropy from qrandom.io and counts bits.
+A binary choice maker based on quantum random number generator that fetches entropy from qrandom.io and uses that to generate 40 million bits to decide if result is a yes (more 1s) or a no (more 0s) or a tie.
 
 ## Usage
 
