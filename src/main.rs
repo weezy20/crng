@@ -46,12 +46,13 @@ fn main() {
              num_rngs, max_rngs, bytes_per_rng);
 
     let seeds: Vec<[u8; 32]> = if num_bytes >= bytes_per_rng {
-        // Create seeds from available bytes, cycling through if we have excess
+        // Create seeds by mixing entropy from different parts of the quantum data
         (0..num_rngs)
             .map(|i| {
                 let mut seed = [0u8; 32];
                 for j in 0..32 {
-                    let byte_index = (i * 32 + j) % num_bytes;
+                    // Spread entropy more evenly across all available bytes
+                    let byte_index = (i * num_bytes / num_rngs + j * num_bytes / 32) % num_bytes;
                     seed[j] = qrandom_bytes[byte_index];
                 }
                 seed
