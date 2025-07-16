@@ -3,7 +3,6 @@ use rand::SeedableRng;
 use rand::Rng;
 use rayon::prelude::*;
 use reqwest::blocking::get;
-use std::convert::TryInto;
 use serde::Deserialize;
 use std::fs;
 use std::env;
@@ -36,22 +35,26 @@ fn main() {
     
     assert_eq!(qrandom_bytes.len(), num_bytes, "Expected {} bytes from qrandom.io", num_bytes);
 
-    // Determine optimal number of RNGs based on available bytes
-    // Use at least 1 RNG, and create as many 32-byte seeds as possible
+    // Use a fixed maximum number of RNGs (32) for optimal parallelization
+    // More RNGs doesn't improve randomness, just increases overhead
+    let max_rngs = 32;
     let bytes_per_rng = 32;
-    let num_rngs = std::cmp::max(1, num_bytes / bytes_per_rng);
-    let bytes_used_for_seeds = num_rngs * bytes_per_rng;
+    let available_full_seeds = num_bytes / bytes_per_rng;
+    let num_rngs = std::cmp::min(max_rngs, std::cmp::max(1, available_full_seeds));
     
-    println!("Using {} RNGs with {}-byte seeds ({} bytes total for seeds)", 
-             num_rngs, bytes_per_rng, bytes_used_for_seeds);
+    println!("Using {} RNGs (max {}) with {}-byte seeds", 
+             num_rngs, max_rngs, bytes_per_rng);
 
     let seeds: Vec<[u8; 32]> = if num_bytes >= bytes_per_rng {
-        // We have enough bytes for at least one full seed
+        // Create seeds from available bytes, cycling through if we have excess
         (0..num_rngs)
             .map(|i| {
-                let start = i * bytes_per_rng;
-                let end = start + bytes_per_rng;
-                qrandom_bytes[start..end].try_into().expect("Slice conversion failed")
+                let mut seed = [0u8; 32];
+                for j in 0..32 {
+                    let byte_index = (i * 32 + j) % num_bytes;
+                    seed[j] = qrandom_bytes[byte_index];
+                }
+                seed
             })
             .collect()
     } else {
@@ -64,17 +67,24 @@ fn main() {
     };
 
     // Each RNG generates a fixed number of bytes to maintain consistent total output
-    let total_target_bits = 5_000_000 * 8; // Same as original: 40 million bits
-    let items_per_rng = total_target_bits / (num_rngs * 8); // bits per RNG / 8 bits per byte
+    let total_target_bits = 40_000_000u64;
+    let base_items_per_rng = (total_target_bits / 8) / num_rngs as u64;
+    let remainder_bytes = ((total_target_bits / 8) % num_rngs as u64) as usize;
     
-    println!("Each of {} RNGs will generate {} bytes ({} total bits)", 
-             num_rngs, items_per_rng, total_target_bits);
+    println!("Each of {} RNGs will generate {} bytes (+ {} RNGs get 1 extra byte)", 
+             num_rngs, base_items_per_rng, remainder_bytes);
+    println!("This ensures exactly {} total bits", total_target_bits);
 
     // Generate random bytes and count set bits in parallel
-    let partial_sums: Vec<u64> = seeds.par_iter()
-        .map(|&seed| {
+    let partial_sums: Vec<u64> = seeds.par_iter().enumerate()
+        .map(|(i, &seed)| {
             let mut rng = StdRng::from_seed(seed);
-            (0..items_per_rng)
+            let items_for_this_rng = if i < remainder_bytes { 
+                base_items_per_rng + 1 
+            } else { 
+                base_items_per_rng 
+            };
+            (0..items_for_this_rng)
                 .map(|_| rng.random::<u8>())
                 .map(|byte| byte.count_ones() as u64)
                 .sum::<u64>()
@@ -83,12 +93,13 @@ fn main() {
 
     // Sum trues and compute falses
     let total_trues: u64 = partial_sums.iter().sum();
-    let total_bits: u64 = total_target_bits as u64;
+    let total_bits: u64 = total_target_bits;
     let total_falses = total_bits - total_trues;
     let diff = total_trues as i64 - total_falses as i64;
 
     println!("Generated {} total bits: {} ones, {} zeros", 
              total_bits, total_trues, total_falses);
+    println!("Ratio: {:.6} ones per bit", total_trues as f64 / total_bits as f64);
 
     // Print result based on difference
     if diff > 0 {
