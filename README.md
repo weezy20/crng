@@ -17,6 +17,8 @@ cargo run 10        # 10 coin flips
 cargo run 100       # 100 coin flips
 ```
 
+**Note**: Running `qcoin` in quick succession may fail due to API rate limits. If this happens, please wait and try again later. In the meantime, `qcoin` will reuse the quantum bytes saved in `qrandom.bytes` from a previous successful request.
+
 ### Command Line Options
 
 | Flag | Description | Default | Notes |
