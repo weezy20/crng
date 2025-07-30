@@ -8,7 +8,7 @@ documentation = "https://docs.rs/qcoin"
 homepage = "https://github.com/weezy20/qcoin"
 repository = "https://github.com/weezy20/qcoin"
 authors = ["Abhishek Shah <abhishekshah3@gmail.com>"]
-keywords = ["randomness", "quantum", "random", "coin-toss", "qrng", "entropy"]
+keywords = ["quantum", "random", "coin-toss", "qrng", "entropy"]
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
