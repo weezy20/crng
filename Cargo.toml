@@ -2,6 +2,12 @@
 name = "crng"
 version = "1.0.0"
 edition = "2024"
+description = "A quantum-based binary choice maker that performs coin tosses using quantum random number generators"
+license = "MIT"
+documentation = "https://docs.rs/crng"
+homepage = "https://github.com/weezy20/crng"
+repository = "https://github.com/weezy20/crng"
+authors = ["Abhishek Shah <abhishekshah3@gmail.com>"]
 
 [dependencies]
 hex = "0.4.3"
