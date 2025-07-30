@@ -15,7 +15,7 @@ cargo run 100       # 100 coin flips
 | Flag | Description | Default | Notes |
 |------|-------------|---------|-------|
 | `<number>` | Number of coin flips | `1` | First positional argument |
-| `-o, --out <file>` | Output file for quantum entropy | `qrandom_bytes.hex` | Only saves when quantum sources succeed |
+| `-o, --out <file>` | Output file for quantum entropy | `qrandom.bytes` | Only saves when quantum sources succeed |
 
 **Note**: If the specified output file already exists, the program will warn and use the default file instead.
 
@@ -25,10 +25,10 @@ cargo run 100       # 100 coin flips
 
 The application attempts to fetch truly random bytes from sources in this order:
 
-1. **🔬 ANU QRNG** - Australian National University's Quantum Random Number Generator
-2. **🌐 qrandom.io** 
+1. **🔬 [ANU QRNG](https://qrng.anu.edu.au/)** - Australian National University's Quantum Random Number Generator
+2. **🌐 [qrandom.io](https://qrandom.io/)** 
 3. **🔒 Cryptographic SRNG** - Cryptographically secure random number generator (fallback)
-4. **♻️ Saved Quantum Bytes** - Previously saved quantum entropy from `qrandom_bytes.hex`
+4. **♻️ Saved Quantum Bytes** - Previously saved quantum entropy from `qrandom.bytes`
 
 ### Core Logic
 
@@ -50,11 +50,11 @@ This approach ensures:
 
 ### Example Flow for 10 Flips
 1. Fetch 1024 quantum bytes from ANU QRNG
-2. Save quantum bytes to `qrandom_bytes.hex`
+2. Save quantum bytes to `qrandom.bytes`
 3. Generate 9 flips (9 × 1024 = 9,216 bytes) using quantum-seeded CSRNG
 4. Use the original 1024 quantum bytes for the 10th flip
 5. Count total 1s vs 0s across all 10,240 bytes
-6. Determine outcome: more 1s = YES, more 0s = N
+6. Determine outcome: more 1s = YES, more 0s = NO
 
 ### Output
 ```
@@ -70,7 +70,7 @@ This approach ensures:
 ✅ Generated 9216 bytes from CSRNG
 🔬 Using quantum entropy directly for final flip
 
-📈 Result: 40960 ones, 40944 zeros
+📈 Result: 40,960 ones, 40,944 zeros
 🎯 Outcome: YES
 ```
 
