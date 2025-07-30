@@ -2,6 +2,24 @@
 
 A quantum-based binary choice maker that performs coin tosses using quantum random number generators. The application tries multiple quantum sources and uses a mix of cryptographically secure RNGs seeded with the quantum bytes obtained from a publicly available QRNG.
 
+## Installation
+
+You can build the project from source or install it directly from crates.io.
+
+### From Source
+
+```bash
+# Assumes you have the source code
+cargo build --release
+```
+The executable will be located at `target/release/qcoin`.
+
+### From Crates.io
+
+```bash
+cargo install qcoin
+```
+
 ## Usage
 
 ```bash
