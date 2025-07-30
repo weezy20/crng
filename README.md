@@ -1,4 +1,4 @@
-# CRNG - Quantum Coin Toss
+# qcoin - Quantum Coin Toss
 
 A quantum-based binary choice maker that performs coin tosses using quantum random number generators. The application tries multiple quantum sources and uses a mix of cryptographically secure RNGs seeded with the quantum bytes obtained from a publicly available QRNG.
 
