@@ -239,17 +239,6 @@ fn fetch_random_bytes_with_source(num_bytes: usize) -> (Vec<u8>, bool) {
         }
     }
     
-    // Final fallback to cryptographic SRNG (not quantum)
-    match fetch_crypto_srng_bytes(num_bytes) {
-        Ok(bytes) => {
-            println!("✅ CSRNG: \x1b[32m{} bytes\x1b[0m", bytes.len());
-            return (bytes, false); // False indicates non-quantum source
-        }
-        Err(e) => {
-            eprintln!("❌ CSRNG: \x1b[31m{}\x1b[0m", e);
-        }
-    }
-
     // Last resort: try to reuse saved quantum bytes
     match load_saved_quantum_bytes() {
         Ok(bytes) => {
@@ -261,6 +250,17 @@ fn fetch_random_bytes_with_source(num_bytes: usize) -> (Vec<u8>, bool) {
         }
     }
 
+    // Final fallback to cryptographic SRNG (not quantum)
+    match fetch_crypto_srng_bytes(num_bytes) {
+        Ok(bytes) => {
+            println!("✅ CSRNG: \x1b[32m{} bytes\x1b[0m", bytes.len());
+            return (bytes, false); // False indicates non-quantum source
+        }
+        Err(e) => {
+            eprintln!("❌ CSRNG: \x1b[31m{}\x1b[0m", e);
+        }
+    }
+    
     eprintln!("💥 All entropy sources failed");
     std::process::exit(1);
 }

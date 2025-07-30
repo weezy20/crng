@@ -1,6 +1,6 @@
 [package]
 name = "qcoin"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2024"
 description = "A quantum-based binary choice maker that performs coin tosses using quantum random number generators"
 license = "MIT"
