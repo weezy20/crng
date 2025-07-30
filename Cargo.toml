@@ -1,6 +1,6 @@
 [package]
 name = "qcoin"
-version = "1.0.1"
+version = "1.1.0"
 edition = "2024"
 description = "A quantum-based binary choice maker that performs coin tosses using quantum random number generators"
 license = "MIT"
@@ -11,6 +11,7 @@ authors = ["Abhishek Shah <abhishekshah3@gmail.com>"]
 keywords = ["randomness", "quantum", "random", "coin-toss", "qrng", "entropy"]
 
 [dependencies]
+clap = { version = "4.5", features = ["derive"] }
 hex = "0.4.3"
 rand = "0.9.1"
 rayon = "1.10.0"

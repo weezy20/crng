@@ -3,10 +3,10 @@ use rand::rngs::StdRng;
 use rayon::prelude::*;
 use reqwest::blocking::Client;
 use serde::Deserialize;
-use std::env;
 use std::fs;
 use std::path::Path;
 use std::time::Duration;
+use clap::Parser;
 
 mod helpers;
 use helpers::format_number_with_commas;
@@ -25,75 +25,146 @@ struct AnuQrngResponse {
     success: bool,
 }
 
+/// Quantum Coin Toss - Generate truly random coin flips using quantum entropy
+#[derive(Parser)]
+#[command(name = "qcoin")]
+#[command(about = "A quantum random number generator for coin tosses")]
+#[command(long_about = "Generate truly random coin flips using quantum entropy sources like ANU QRNG and qrandom.io. Fallback to cryptographically secure RNG when quantum sources are unavailable.")]
+#[command(version)]
+struct Args {
+    /// Number of coin flips to perform
+    #[arg(short = 'n', long = "number", value_name = "NUM_FLIPS", default_value = "1")]
+    num_flips: usize,
+    
+    /// Output file for quantum entropy bytes (hex format)
+    #[arg(short = 'o', long = "output", value_name = "FILE", default_value = DEFAULT_OUTPUT_FILE)]
+    output_file: String,
+    
+    /// Source file to use as entropy source instead of quantum sources.
+    /// File can contain hex string (e.g., "abc123", "0xabc123") or raw binary data.
+    /// Hex strings are automatically detected and decoded.
+    #[arg(short = 's', long = "source", value_name = "FILE", conflicts_with = "output_file")]
+    source_file: Option<String>,
+    
+    /// Hex string to use as entropy source instead of quantum sources.
+    /// Can include optional 0x prefix (e.g., "abc123", "0xabc123").
+    #[arg(long = "hex", value_name = "HEX_STRING", conflicts_with_all = ["source_file"])]
+    hex_string: Option<String>,
+}
+
 fn main() {
+    // Parse command line arguments using clap
+    let args = Args::parse();
+    
     println!("🎲 \x1b[1mQuantum Coin Toss\x1b[0m");
     println!();
 
-    // Parse command line arguments for number of coin flips and output file
-    let args: Vec<String> = env::args().collect();
-    let mut num_flips = 1;
-    let mut output_file = DEFAULT_OUTPUT_FILE.to_string();
-    
-    let mut i = 1;
-    while i < args.len() {
-        match args[i].as_str() {
-            "-o" | "--out" => {
-                if i + 1 < args.len() {
-                    let requested_file = &args[i + 1];
-                    if Path::new(requested_file).exists() {
-                        println!("\x1b[33m⚠️  Warning: File '{}' already exists, using default '{}'\x1b[0m", requested_file, DEFAULT_OUTPUT_FILE);
-                    } else {
-                        output_file = requested_file.clone();
-                    }
-                    i += 2;
-                } else {
-                    eprintln!("❌ Missing file path after {}", args[i]);
-                    std::process::exit(1);
-                }
-            }
-            _ => {
-                match args[i].parse::<usize>() {
-                    Ok(n) if n > 0 => num_flips = n,
-                    Ok(_) => {
-                        eprintln!("❌ Number of flips must be greater than 0");
-                        std::process::exit(1);
-                    }
-                    Err(_) => {
-                        eprintln!("❌ Invalid number format: {}", args[i]);
-                        std::process::exit(1);
-                    }
-                }
-                i += 1;
-            }
-        }
+    // Validate number of flips
+    if args.num_flips == 0 {
+        eprintln!("❌ Number of flips must be greater than 0");
+        std::process::exit(1);
     }
 
-    println!("📊 Flips: {}", num_flips);
+    // Check if output file already exists and warn user
+    if Path::new(&args.output_file).exists() && args.output_file != DEFAULT_OUTPUT_FILE {
+        println!("\x1b[33m⚠️  Warning: File '{}' already exists, it may be overwritten\x1b[0m", args.output_file);
+    }
+
+    println!("📊 Flips: {}", args.num_flips);
     println!();
 
-    // Try to fetch bytes from quantum sources
-    let (quantum_bytes, is_quantum) = fetch_random_bytes_with_source(1024);
+    // Determine entropy source and fetch bytes
+    let (entropy_bytes, is_quantum, source_description) = if let Some(hex_string) = &args.hex_string {
+        // Use hex string as entropy
+        match parse_hex_string(hex_string) {
+            Ok(bytes) => {
+                if bytes.is_empty() {
+                    eprintln!("❌ Hex string is empty");
+                    std::process::exit(1);
+                }
+                
+                let description = if args.num_flips == 1 {
+                    // For single flip, always use bytes directly
+                    format!("🔤 Using hex string entropy ({} bytes - direct interpretation)", bytes.len())
+                } else if bytes.len() == 1024 {
+                    "🔤 Using hex string entropy (1024 bytes - perfect match)".to_string()
+                } else if bytes.len() < 1024 {
+                    format!("🔤 Using hex string entropy ({} bytes < 1024 - will seed CSRNG)", bytes.len())
+                } else {
+                    format!("🔤 Using hex string entropy ({} bytes > 1024 - will seed CSRNG)", bytes.len())
+                };
+                
+                (bytes, false, description)
+            },
+            Err(e) => {
+                eprintln!("❌ Failed to parse hex string: {}", e);
+                std::process::exit(1);
+            }
+        }
+    } else if let Some(source_file) = &args.source_file {
+        // Use source file as entropy
+        match read_source_file(source_file) {
+            Ok(bytes) => {
+                if bytes.is_empty() {
+                    eprintln!("❌ Source file is empty");
+                    std::process::exit(1);
+                }
+                
+                let description = if args.num_flips == 1 {
+                    // For single flip, always use bytes directly
+                    format!("📁 Using file entropy ({} bytes - direct interpretation)", bytes.len())
+                } else if bytes.len() == 1024 {
+                    "📁 Using file entropy (1024 bytes - perfect match)".to_string()
+                } else if bytes.len() < 1024 {
+                    format!("📁 Using file entropy ({} bytes < 1024 - will seed CSRNG)", bytes.len())
+                } else {
+                    format!("📁 Using file entropy ({} bytes > 1024 - will seed CSRNG)", bytes.len())
+                };
+                
+                (bytes, false, description)
+            },
+            Err(e) => {
+                eprintln!("❌ Failed to read source file '{}': {}", source_file, e);
+                std::process::exit(1);
+            }
+        }
+    } else {
+        // Use quantum sources as before
+        let (quantum_bytes, is_quantum) = fetch_random_bytes_with_source(1024);
+        let description = if is_quantum {
+            "🌱 Using quantum entropy sources".to_string()
+        } else {
+            "🌱 Using saved quantum entropy".to_string()
+        };
+        (quantum_bytes, is_quantum, description)
+    };
     
-    // Save quantum bytes to hex file only if we got them from quantum sources
-    if is_quantum {
-        save_quantum_bytes_to_file(&quantum_bytes, &output_file);
+    println!("{}", source_description);
+    
+    // Save quantum bytes to hex file only if we got them from quantum sources and not using source file
+    if is_quantum && args.source_file.is_none() {
+        save_quantum_bytes_to_file(&entropy_bytes, &args.output_file);
+    } else if args.hex_string.is_some() {
+        // Save hex string entropy to file for reuse
+        save_quantum_bytes_to_file(&entropy_bytes, &args.output_file);
+        println!("💾 Hex string entropy saved for future reuse");
     }
 
-    let (ones, zeros) = if num_flips == 1 {
-        // Single flip: use quantum bytes directly
-        println!("🔬 Using quantum entropy directly");
-        let (q_ones, q_zeros) = count_bits(&quantum_bytes);
-        println!("🎲 Quantum entropy: \x1b[36m{}\x1b[0m 1s : \x1b[36m{}\x1b[0m 0s (ratio: {})", q_ones, q_zeros, format_ratio(q_ones, q_zeros));
+    let (ones, zeros) = if args.num_flips == 1 {
+        // Single flip: use entropy bytes directly
+        println!("🔬 Using entropy directly");
+        let (q_ones, q_zeros) = count_bits(&entropy_bytes);
+        println!("🎲 Entropy bits: \x1b[36m{}\x1b[0m 1s : \x1b[36m{}\x1b[0m 0s (ratio: {})", q_ones, q_zeros, format_ratio(q_ones, q_zeros));
         (q_ones, q_zeros)
     } else {
-        // Multiple flips: N-1 flips using seeded CSRNG + 1 flip using quantum bytes directly
-        if !is_quantum {
-            println!("🌱 Using saved quantum entropy to seed {} flips ({} CSRNG + 1 quantum)", num_flips, num_flips - 1);
+        // Multiple flips: N-1 flips using seeded CSRNG + 1 flip using entropy bytes directly
+        if entropy_bytes.len() < 1024 {
+            println!("🌱 Using {} bytes to seed {} flips ({} CSRNG + 1 direct)", entropy_bytes.len(), args.num_flips, args.num_flips - 1);
         } else {
-            println!("🌱 Using quantum seed for {} flips ({} CSRNG + 1 quantum)", num_flips, num_flips - 1);
+            println!("🌱 Using entropy to seed {} flips ({} CSRNG + 1 direct)", args.num_flips, args.num_flips - 1);
         }
-        let (total_ones, total_zeros, q_ones, q_zeros) = perform_multiple_flips(&quantum_bytes, num_flips);
-        println!("🎲 Quantum entropy: \x1b[36m{}\x1b[0m 1s : \x1b[36m{}\x1b[0m 0s (ratio: {})", format_number_with_commas(q_ones as u64), format_number_with_commas(q_zeros as u64), format_ratio(q_ones, q_zeros));
+        let (total_ones, total_zeros, q_ones, q_zeros) = perform_multiple_flips(&entropy_bytes, args.num_flips);
+        println!("🎲 Direct entropy: \x1b[36m{}\x1b[0m 1s : \x1b[36m{}\x1b[0m 0s (ratio: {})", format_number_with_commas(q_ones as u64), format_number_with_commas(q_zeros as u64), format_ratio(q_ones, q_zeros));
         (total_ones, total_zeros)
     };
     
@@ -134,6 +205,78 @@ fn save_quantum_bytes_to_file(bytes: &[u8], output_file: &str) {
         Ok(_) => println!("💾 Saved quantum entropy to file: \x1b[36m{}\x1b[0m", output_file),
         Err(e) => eprintln!("❌ Failed to save: {}", e),
     }
+}
+
+fn read_source_file(file_path: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    // First try to read as text (for hex strings)
+    match fs::read_to_string(file_path) {
+        Ok(content) => {
+            let trimmed = content.trim();
+            
+            if trimmed.len() > 0 {
+                // Try to handle hex string (with or without 0x prefix)
+                let hex_str = if trimmed.starts_with("0x") || trimmed.starts_with("0X") {
+                    &trimmed[2..] // Remove 0x prefix
+                } else {
+                    trimmed
+                };
+                
+                // Check if it looks like a hex string (only contains hex characters and even length)
+                if hex_str.len() > 0 && hex_str.len() % 2 == 0 && hex_str.chars().all(|c| c.is_ascii_hexdigit()) {
+                    // Try to decode as hex
+                    match hex::decode(hex_str) {
+                        Ok(bytes) => {
+                            println!("📁 Reading {} bytes from hex string in source file: \x1b[36m{}\x1b[0m", bytes.len(), file_path);
+                            return Ok(bytes);
+                        },
+                        Err(_) => {
+                            // Fall through to binary read
+                        }
+                    }
+                }
+            }
+            
+            // If not a valid hex string, treat the text content as raw bytes
+            let bytes = content.as_bytes().to_vec();
+            println!("📁 Reading {} bytes from text file as raw bytes: \x1b[36m{}\x1b[0m", bytes.len(), file_path);
+            Ok(bytes)
+        },
+        Err(_) => {
+            // If reading as text fails, read as binary
+            let bytes = fs::read(file_path)?;
+            println!("📁 Reading {} bytes from binary file: \x1b[36m{}\x1b[0m", bytes.len(), file_path);
+            Ok(bytes)
+        }
+    }
+}
+
+fn parse_hex_string(hex_input: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let trimmed = hex_input.trim();
+    
+    // Handle hex string (with or without 0x prefix)
+    let hex_str = if trimmed.starts_with("0x") || trimmed.starts_with("0X") {
+        &trimmed[2..] // Remove 0x prefix
+    } else {
+        trimmed
+    };
+    
+    // Validate hex string
+    if hex_str.is_empty() {
+        return Err("Empty hex string".into());
+    }
+    
+    if hex_str.len() % 2 != 0 {
+        return Err("Hex string must have even length".into());
+    }
+    
+    if !hex_str.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("Hex string contains invalid characters".into());
+    }
+    
+    // Decode hex string
+    let bytes = hex::decode(hex_str)?;
+    println!("🔤 Parsing {} bytes from hex string: \x1b[36m{}\x1b[0m", bytes.len(), hex_str);
+    Ok(bytes)
 }
 
 fn load_saved_quantum_bytes() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
